@@ -134,8 +134,8 @@ class ReadlineAlikeReader(historical_reader.HistoricalReader, CompletingReader):
             p -= 1
         return "".join(b[p + 1 : self.pos])
 
-    def get_completions(self, stem: str) -> list[str]:
-        module_completions = self.get_module_completions()
+    def get_completions(self, stem: str, repeated: bool) -> tuple[list[str], str | None]:
+        module_completions = self.get_module_completions(repeated)
         if module_completions is not None:
             return module_completions
         if len(stem) == 0 and self.more_lines is not None:
@@ -144,7 +144,7 @@ class ReadlineAlikeReader(historical_reader.HistoricalReader, CompletingReader):
             while p > 0 and b[p - 1] != "\n":
                 p -= 1
             num_spaces = 4 - ((self.pos - p) % 4)
-            return [" " * num_spaces]
+            return [" " * num_spaces], None
         result = []
         function = self.config.readline_completer
         if function is not None:
@@ -165,11 +165,11 @@ class ReadlineAlikeReader(historical_reader.HistoricalReader, CompletingReader):
             # emulate the behavior of the standard readline that sorts
             # the completions before displaying them.
             result.sort()
-        return result
+        return result, None
 
-    def get_module_completions(self) -> list[str] | None:
+    def get_module_completions(self, repeated: bool) -> tuple[list[str], str | None] | None:
         line = self.get_line()
-        return self.config.module_completer.get_completions(line)
+        return self.config.module_completer.get_completions(line, repeated)
 
     def get_trimmed_history(self, maxlength: int) -> list[str]:
         if maxlength >= 0:

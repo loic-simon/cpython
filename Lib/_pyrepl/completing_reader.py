@@ -172,19 +172,23 @@ class complete(commands.Command):
         completions_unchangable = last_is_completer and immutable_completions
         stem = r.get_stem()
         if not completions_unchangable:
-            r.cmpltn_menu_choices = r.get_completions(stem)
+            r.cmpltn_menu_choices, cmpltn_msg = r.get_completions(
+                stem, last_is_completer
+            )
 
         completions = r.cmpltn_menu_choices
         if not completions:
-            r.error("no matches")
+            if not cmpltn_msg:
+                r.error("no matches")
         elif len(completions) == 1:
-            if completions_unchangable and len(completions[0]) == len(stem):
-                r.msg = "[ sole completion ]"
-                r.dirty = True
-            r.insert(completions[0][len(stem):])
+            if not cmpltn_msg:
+                if completions_unchangable and len(completions[0]) == len(stem):
+                    r.msg = "[ sole completion ]"
+                    r.dirty = True
+                r.insert(completions[0][len(stem):])
         else:
             p = prefix(completions, len(stem))
-            if p:
+            if p and not cmpltn_msg:
                 r.insert(p)
             if last_is_completer:
                 r.cmpltn_menu_visible = True
@@ -201,6 +205,14 @@ class complete(commands.Command):
                 else:
                     r.msg = "[ not unique ]"
                     r.dirty = True
+
+        if cmpltn_msg:
+            if r.msg:
+                r.msg += "\n" + cmpltn_msg
+            else:
+                r.msg = cmpltn_msg
+            r.cmpltn_message_visible = True
+            r.dirty = True
 
 
 class self_insert(commands.self_insert):
@@ -291,8 +303,8 @@ class CompletingReader(Reader):
             p -= 1
         return ''.join(b[p+1:self.pos])
 
-    def get_completions(self, stem: str) -> list[str]:
-        return []
+    def get_completions(self, stem: str, repeated: bool) -> tuple[list[str], str | None]:
+        return [], None
 
     def get_line(self) -> str:
         """Return the current line until the cursor position."""
