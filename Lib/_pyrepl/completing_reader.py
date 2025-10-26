@@ -29,8 +29,10 @@ from .reader import Reader
 
 # types
 Command = commands.Command
-if False:
-    from .types import KeySpec, CommandName
+TYPE_CHECKING = False
+if TYPE_CHECKING:
+    from .types import KeySpec, CommandName, CompletionAction
+    from collections.abc import Callable
 
 
 def prefix(wordlist: list[str], j: int = 0) -> str:
@@ -171,10 +173,11 @@ class complete(commands.Command):
         immutable_completions = r.assume_immutable_completions
         completions_unchangable = last_is_completer and immutable_completions
         stem = r.get_stem()
+        cmpltn_msg = r.cmpltn_action = None
         if not completions_unchangable:
-            r.cmpltn_menu_choices, cmpltn_msg = r.get_completions(
-                stem, last_is_completer
-            )
+            r.cmpltn_menu_choices, action = r.get_completions(stem)
+            if action:
+                cmpltn_msg, r.cmpltn_action = action
 
         completions = r.cmpltn_menu_choices
         if not completions:
@@ -236,6 +239,20 @@ class self_insert(commands.self_insert):
                     r.cmpltn_reset()
 
 
+class complete_action(complete):
+    def do(self) -> None:
+        r: CompletingReader
+        r = self.reader  # type: ignore[assignment]
+
+        if not r.cmpltn_action or not r.cmpltn_message_visible:
+            r.error("nothing to do")
+            return
+
+        r.msg = r.cmpltn_action()
+        if not r.msg:
+            super().do()
+
+
 @dataclass
 class CompletingReader(Reader):
     """Adds completion support"""
@@ -252,21 +269,23 @@ class CompletingReader(Reader):
     cmpltn_message_visible: bool = field(init=False)
     cmpltn_menu_end: int = field(init=False)
     cmpltn_menu_choices: list[str] = field(init=False)
+    cmpltn_action: Callable[[], str | None] | None = field(init=False)
 
     def __post_init__(self) -> None:
         super().__post_init__()
         self.cmpltn_reset()
-        for c in (complete, self_insert):
+        for c in (complete, self_insert, complete_action):
             self.commands[c.__name__] = c
             self.commands[c.__name__.replace('_', '-')] = c
 
     def collect_keymap(self) -> tuple[tuple[KeySpec, CommandName], ...]:
         return super().collect_keymap() + (
-            (r'\t', 'complete'),)
+            (r'\t', 'complete'),
+            (r'\<f8>', 'complete-action'),)
 
     def after_command(self, cmd: Command) -> None:
         super().after_command(cmd)
-        if not isinstance(cmd, (complete, self_insert)):
+        if not isinstance(cmd, (complete, self_insert, complete_action)):
             self.cmpltn_reset()
 
     def calc_screen(self) -> list[str]:
@@ -293,6 +312,7 @@ class CompletingReader(Reader):
         self.cmpltn_message_visible = False
         self.cmpltn_menu_end = 0
         self.cmpltn_menu_choices = []
+        self.cmpltn_action = None
 
     def get_stem(self) -> str:
         st = self.syntax_table
@@ -303,7 +323,7 @@ class CompletingReader(Reader):
             p -= 1
         return ''.join(b[p+1:self.pos])
 
-    def get_completions(self, stem: str, repeated: bool) -> tuple[list[str], str | None]:
+    def get_completions(self, stem: str) -> tuple[list[str], CompletionAction | None]:
         return [], None
 
     def get_line(self) -> str:

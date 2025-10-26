@@ -55,7 +55,7 @@ ENCODING = sys.getdefaultencoding() or "latin1"
 # types
 Command = commands.Command
 from collections.abc import Callable, Collection
-from .types import Callback, Completer, KeySpec, CommandName
+from .types import Callback, Completer, KeySpec, CommandName, CompletionAction
 
 TYPE_CHECKING = False
 
@@ -134,8 +134,8 @@ class ReadlineAlikeReader(historical_reader.HistoricalReader, CompletingReader):
             p -= 1
         return "".join(b[p + 1 : self.pos])
 
-    def get_completions(self, stem: str, repeated: bool) -> tuple[list[str], str | None]:
-        module_completions = self.get_module_completions(repeated)
+    def get_completions(self, stem: str) -> tuple[list[str], CompletionAction | None]:
+        module_completions = self.get_module_completions()
         if module_completions is not None:
             return module_completions
         if len(stem) == 0 and self.more_lines is not None:
@@ -167,9 +167,9 @@ class ReadlineAlikeReader(historical_reader.HistoricalReader, CompletingReader):
             result.sort()
         return result, None
 
-    def get_module_completions(self, repeated: bool) -> tuple[list[str], str | None] | None:
+    def get_module_completions(self) -> tuple[list[str], CompletionAction | None] | None:
         line = self.get_line()
-        return self.config.module_completer.get_completions(line, repeated)
+        return self.config.module_completer.get_completions(line)
 
     def get_trimmed_history(self, maxlength: int) -> list[str]:
         if maxlength >= 0:
